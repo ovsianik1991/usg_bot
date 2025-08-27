@@ -1,9 +1,9 @@
 import os
 import requests
 import csv
-from aiogram import types
-from aiogram.client.bot import Bot, DefaultBotProperties
-from aiogram.dispatcher import Dispatcher
+import asyncio
+from aiogram import Bot, Dispatcher, types
+from aiogram.client.bot import DefaultBotProperties
 from aiogram.filters import Command
 
 # ==== Токени з змінних середовища ====
@@ -23,12 +23,9 @@ with open("faq.csv", "r", encoding="utf-8") as f:
     for row in reader:
         faq.append({"question": row["question"], "answer": row["answer"]})
 
-# ==== Створюємо бота ====
-bot = Bot(
-    token=API_TOKEN,
-    default=DefaultBotProperties(parse_mode="HTML")
-)
-dp = Dispatcher(bot)
+# ==== Створюємо бота та диспетчер ====
+bot = Bot(token=API_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+dp = Dispatcher()
 
 # ==== Функція для пошуку відповіді в FAQ ====
 def find_faq_answer(user_question: str):
@@ -44,7 +41,7 @@ def ask_hf_model(prompt: str):
     payload = {"inputs": prompt}
 
     response = requests.post(url, headers=headers, json=payload, timeout=30)
-    response.raise_for_status()  # Якщо помилка HTTP – виключення
+    response.raise_for_status()
 
     data = response.json()
     if isinstance(data, list) and "generated_text" in data[0]:
@@ -78,10 +75,4 @@ async def handle_message(message: types.Message):
 
 # ==== Запуск бота ====
 if __name__ == "__main__":
-    import asyncio
-    from aiogram import F
-
-    async def main():
-        await dp.start_polling()
-
-    asyncio.run(main())
+    asyncio.run(dp.start_polling(bot))
