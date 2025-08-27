@@ -15,7 +15,7 @@ if not HF_API_TOKEN:
     raise ValueError("Не знайдено HF_API_TOKEN у змінних середовища!")
 
 HEADERS = {"Authorization": f"Bearer {HF_API_TOKEN}"}
-HF_MODEL = "gpt2"  # безкоштовна модель для тесту
+HF_MODEL = "TheBloke/wizardLM-7B-uncensored-HF"
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
