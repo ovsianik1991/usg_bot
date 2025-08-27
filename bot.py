@@ -3,27 +3,31 @@ import pandas as pd
 import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from difflib import get_close_matches
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 API_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-# Адмін для оновлення FAQ
 ADMIN_ID = 123456789  # <-- замініть на свій Telegram ID
 
-# Файли
 FAQ_FILE = "faq.csv"
 UNKNOWN_FILE = "unknown_questions.csv"
 
 # Завантажуємо FAQ
 faq = pd.read_csv(FAQ_FILE)
-questions_list = [q.lower() for q in faq['question']]
+questions_list = faq['question'].tolist()
 
-# Створимо unknown файл, якщо його немає
+# Створюємо unknown файл, якщо його немає
 if not os.path.exists(UNKNOWN_FILE):
     pd.DataFrame(columns=["question"]).to_csv(UNKNOWN_FILE, index=False)
+
+# NLP модель для ембеддінгів
+model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+faq_embeddings = model.encode(questions_list)
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
@@ -33,17 +37,31 @@ async def start(message: types.Message):
 
 @dp.message()
 async def answer(message: types.Message):
-    user_question = message.text.strip().lower()
+    user_question = message.text.strip()
+
+    # Ембеддінг питання користувача
+    user_emb = model.encode([user_question])
     
-    match = get_close_matches(user_question, questions_list, n=1, cutoff=0.4)
-    if match:
-        response = faq.loc[faq['question'].str.lower() == match[0], 'answer'].values[0]
+    # Косинусна схожість
+    similarities = cosine_similarity(user_emb, faq_embeddings)[0]
+    best_idx = np.argmax(similarities)
+    
+    # Поріг схожості
+    if similarities[best_idx] >= 0.6:
+        response = faq.iloc[best_idx]['answer']
         await message.answer(response)
     else:
-        # Пропонуємо схожі питання
-        suggestions = get_close_matches(user_question, questions_list, n=3, cutoff=0.3)
+        # Показуємо топ-3 схожих питання
+        top_indices = similarities.argsort()[-3:][::-1]
+        top_scores = similarities[top_indices]
+        
+        suggestions = []
+        for idx, score in zip(top_indices, top_scores):
+            if score >= 0.3:  # мінімальна схожість для підказки
+                suggestions.append(f"- {faq.iloc[idx]['question']}")
+        
         if suggestions:
-            suggestion_text = "\n".join(f"- {s}" for s in suggestions)
+            suggestion_text = "\n".join(suggestions)
             await message.answer(
                 "Вибачте, я не знайшов точної відповіді 🤔\nМожливо, ви мали на увазі одне з цих питань:\n" + suggestion_text
             )
@@ -52,10 +70,10 @@ async def answer(message: types.Message):
             
             # Логування нового питання
             unknown_df = pd.read_csv(UNKNOWN_FILE)
-            unknown_df = pd.concat([unknown_df, pd.DataFrame({"question": [message.text.strip()]})], ignore_index=True)
+            unknown_df = pd.concat([unknown_df, pd.DataFrame({"question": [user_question]})], ignore_index=True)
             unknown_df.to_csv(UNKNOWN_FILE, index=False)
 
-# Команда для додавання питання до FAQ (тільки адміністратор)
+# Команда для додавання питання до FAQ
 @dp.message(Command("add"))
 async def add_to_faq(message: types.Message):
     if message.from_user.id != ADMIN_ID:
@@ -78,8 +96,10 @@ async def add_to_faq(message: types.Message):
         faq_df = pd.concat([faq_df, new_row], ignore_index=True)
         faq_df.to_csv(FAQ_FILE, index=False)
 
-        # Оновлюємо список питань
-        questions_list.append(question.lower())
+        # Оновлюємо вектори
+        global faq_embeddings, questions_list
+        questions_list.append(question)
+        faq_embeddings = model.encode(questions_list)
 
         await message.answer(f"✅ Питання додано до FAQ:\n{question}")
 
