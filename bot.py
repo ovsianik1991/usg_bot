@@ -24,43 +24,49 @@ if not os.path.exists(UNKNOWN_FILE):
     pd.DataFrame(columns=["question"]).to_csv(UNKNOWN_FILE, index=False)
 
 def ask_grok(question: str) -> str:
-    messages = [
-        {"role": "system", "content": "Ти FAQ-бот. Відповідай, використовуючи лише дані з бази FAQ. Якщо не знаєш — скажи язково та збережи питання."},
-        {"role": "user", "content": question}
-    ]
+    url = "https://api.x.ai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROK_API_KEY}",
         "Content-Type": "application/json"
     }
     data = {
-        "model": "grok-beta",  # спробуй також "grok-3-beta" якщо доступна
-        "messages": messages,
+        "model": "grok-4",   # згідно з офіційною документацією
+        "messages": [
+            {"role": "system", "content": "Ти FAQ-бот. Відповідай коротко і чітко."},
+            {"role": "user", "content": question}
+        ],
         "temperature": 0.7,
-        "max_tokens": 300
+        "stream": False
     }
-    response = requests.post("https://api.x.ai/v1/chat/completions", headers=headers, json=data, timeout=30)
+
+    response = requests.post(url, headers=headers, json=data, timeout=30)
     response.raise_for_status()
     resp = response.json()
     return resp["choices"][0]["message"]["content"].strip()
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer("Привіт! Я FAQ-бот. Спробуй задати питання.")
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    for q in faq_dict.keys():
+        kb.add(types.KeyboardButton(q))
+    await message.answer("Привіт! Обери питання зі списку:", reply_markup=kb)
 
 @dp.message()
 async def handle_message(message: types.Message):
     text = message.text.strip()
-    try:
-        answer = ask_grok(text)
-        if "не знайшов" in answer.lower():
-            df = pd.read_csv(UNKNOWN_FILE)
-            df = pd.concat([df, pd.DataFrame({"question":[text]})], ignore_index=True)
-            df.to_csv(UNKNOWN_FILE, index=False)
-        await message.answer(answer)
-    except requests.HTTPError as e:
-        await message.answer(f"AI помилка: {e}")
-    except Exception as e:
-        await message.answer(f"Неочікувана помилка: {e}")
+    if text in faq_dict:
+        await message.answer(faq_dict[text])
+    else:
+        try:
+            answer = ask_grok(text)
+            # якщо відповідь не схожа на FAQ → логування
+            if not any(q.lower() in text.lower() for q in faq_dict.keys()):
+                df = pd.read_csv(UNKNOWN_FILE)
+                df = pd.concat([df, pd.DataFrame({"question": [text]})], ignore_index=True)
+                df.to_csv(UNKNOWN_FILE, index=False)
+            await message.answer(answer)
+        except Exception as e:
+            await message.answer(f"AI помилка: {e}")
 
 if __name__ == "__main__":
     asyncio.run(dp.start_polling(bot))
