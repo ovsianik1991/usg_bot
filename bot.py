@@ -15,7 +15,7 @@ dp = Dispatcher()
 
 # Завантажуємо FAQ з CSV
 FAQ = {}
-with open("faq.csv", newline="", encoding="utf-8") as csvfile:
+with open("faq_new.csv", newline="", encoding="utf-8") as csvfile:
     reader = csv.reader(csvfile)
     for row in reader:
         if len(row) >= 2:
@@ -40,7 +40,10 @@ async def cmd_start(message: Message):
 async def handle_faq(callback: CallbackQuery):
     question = callback.data
     answer = FAQ[question]
-    await callback.message.edit_text(f"❓ {question}\n\n💡 {answer}")
+    await callback.message.edit_text(
+        f"❓ {question}\n\n💡 {answer}",
+        reply_markup=build_keyboard()
+    )
 
 if __name__ == "__main__":
     asyncio.run(dp.start_polling(bot))
