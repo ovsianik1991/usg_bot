@@ -4,14 +4,18 @@ import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
-# Отримуємо токен з Environment Variable
+# Telegram токен (змінна середовища)
 API_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
 if not API_TOKEN:
     raise ValueError("Не знайдено TELEGRAM_BOT_TOKEN у змінних середовища!")
 
-# Використовуємо безкоштовну модель Hugging Face
-HF_MODEL = "gpt2"
+# Hugging Face API токен (змінна середовища)
+HF_API_TOKEN = os.getenv("HF_API_TOKEN")
+if not HF_API_TOKEN:
+    raise ValueError("Не знайдено HF_API_TOKEN у змінних середовища!")
+
+HEADERS = {"Authorization": f"Bearer {HF_API_TOKEN}"}
+HF_MODEL = "gpt2"  # безкоштовна модель для тесту
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
@@ -25,9 +29,8 @@ def get_ai_answer(question):
     payload = {
         "inputs": f"Ти помічник зі страхових питань. Відповідай українською.\nПитання: {question}\nВідповідь:"
     }
-
     try:
-        response = requests.post(url, json=payload, timeout=60)
+        response = requests.post(url, json=payload, headers=HEADERS, timeout=60)
         response.raise_for_status()
         data = response.json()
         if isinstance(data, list) and "generated_text" in data[0]:
