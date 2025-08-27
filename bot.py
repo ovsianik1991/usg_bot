@@ -1,10 +1,17 @@
+import os
 import asyncio
 import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
-API_TOKEN = "ВАШ_TELEGRAM_BOT_TOKEN"
-HF_MODEL = "gpt2"  # безкоштовна модель, працює без токена
+# Отримуємо токен з Environment Variable
+API_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+if not API_TOKEN:
+    raise ValueError("Не знайдено TELEGRAM_BOT_TOKEN у змінних середовища!")
+
+# Використовуємо безкоштовну модель Hugging Face
+HF_MODEL = "gpt2"
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
