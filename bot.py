@@ -1,5 +1,6 @@
 import os
 import csv
+import hashlib
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
@@ -15,17 +16,22 @@ dp = Dispatcher()
 
 # Завантажуємо FAQ з CSV
 FAQ = {}
+QUESTION_MAP = {}  # question_id -> question_text
+
 with open("faq_new.csv", newline="", encoding="utf-8") as csvfile:
     reader = csv.reader(csvfile)
     for row in reader:
         if len(row) >= 2:
             question, answer = row[0], row[1]
-            FAQ[question] = answer
+            # створюємо короткий ключ (до 32 символів)
+            qid = hashlib.md5(question.encode()).hexdigest()[:32]
+            FAQ[qid] = answer
+            QUESTION_MAP[qid] = question
 
 def build_keyboard():
     kb = InlineKeyboardBuilder()
-    for question in FAQ.keys():
-        kb.button(text=question, callback_data=question)
+    for qid, question in QUESTION_MAP.items():
+        kb.button(text=question, callback_data=qid)
     kb.adjust(1)
     return kb.as_markup()
 
@@ -38,8 +44,9 @@ async def cmd_start(message: Message):
 
 @dp.callback_query(F.data.in_(FAQ.keys()))
 async def handle_faq(callback: CallbackQuery):
-    question = callback.data
-    answer = FAQ[question]
+    qid = callback.data
+    question = QUESTION_MAP[qid]
+    answer = FAQ[qid]
     await callback.message.edit_text(
         f"❓ {question}\n\n💡 {answer}",
         reply_markup=build_keyboard()
