@@ -4,17 +4,13 @@ import asyncio
 import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from dotenv import load_dotenv
 
-# Завантажуємо .env
-load_dotenv()
-
-# Токени з .env
+# Беремо токени з змінних середовища
 API_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GROK_API_KEY = os.getenv("GROK_API_KEY")
 
 if not API_TOKEN or not GROK_API_KEY:
-    raise ValueError("Missing TELEGRAM_BOT_TOKEN or GROK_API_KEY in .env")
+    raise ValueError("Missing TELEGRAM_BOT_TOKEN or GROK_API_KEY environment variable")
 
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
