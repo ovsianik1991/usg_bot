@@ -1,2 +1,6 @@
 aiogram==3.4.1
 pandas
+sentence-transformers
+scikit-learn
+numpy
+torch
