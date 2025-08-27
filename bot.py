@@ -1,41 +1,61 @@
 import os
 import requests
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import ParseMode
+from aiogram.filters import Command
+from aiogram.enums import ParseMode
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from aiogram.types import Message
 
+# ==== TELEGRAM TOKEN ====
 API_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+if not API_TOKEN:
+    raise ValueError("Не знайдено TELEGRAM_BOT_TOKEN у змінних середовища!")
+
+# ==== HUGGING FACE TOKEN ====
 HF_API_TOKEN = os.getenv("HF_API_TOKEN")
+if not HF_API_TOKEN:
+    raise ValueError("Не знайдено HF_API_TOKEN у змінних середовища!")
 
-bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+HF_MODEL = "deepseek-ai/DeepSeek-V3.1"  # Модель HF
 
-HEADERS = {"Authorization": f"Bearer {HF_API_TOKEN}"}
-MODEL_URL = "https://api-inference.huggingface.co/models/deepseek-ai/DeepSeek-V3.1"
+bot = Bot(token=API_TOKEN, parse_mode=ParseMode.HTML)
+dp = Dispatcher()
 
-def query_huggingface(payload):
-    response = requests.post(MODEL_URL, headers=HEADERS, json=payload)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        return {"error": f"Помилка {response.status_code}: {response.text}"}
+# ==== Запит до Hugging Face API ====
+def generate_answer(question: str) -> str:
+    url = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+    headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
+    payload = {"inputs": question}
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        data = response.json()
+        # Hugging Face може повертати список результатів
+        if isinstance(data, list) and len(data) > 0 and "generated_text" in data[0]:
+            return data[0]["generated_text"]
+        elif isinstance(data, dict) and "error" in data:
+            return f"Помилка AI: {data['error']}"
+        return str(data)
+    except requests.exceptions.RequestException as e:
+        return f"Сталася помилка: {e}"
 
-@dp.message_handler(commands=["start"])
-async def cmd_start(message: types.Message):
-    await message.reply("Привіт! Надішліть повідомлення, і я відповім.")
+# ==== Команди бота ====
+@dp.message(Command(commands=["start", "help"]))
+async def cmd_start(message: Message):
+    await message.answer("Привіт! Я AI-FAQ бот. Задайте своє питання, і я спробую відповісти.")
 
-@dp.message_handler()
-async def handle_message(message: types.Message):
-    user_input = message.text.strip()
-    if user_input:
-        payload = {"inputs": user_input}
-        hf_response = query_huggingface(payload)
-        if "error" in hf_response:
-            await message.reply(f"Сталася помилка: {hf_response['error']}")
-        else:
-            await message.reply(hf_response.get("generated_text", "Вибачте, я не зміг згенерувати відповідь."), parse_mode=ParseMode.MARKDOWN)
-    else:
-        await message.reply("Будь ласка, надішліть текст для обробки.")
+# ==== Обробка текстових повідомлень ====
+@dp.message()
+async def handle_message(message: Message):
+    question = message.text.strip()
+    if not question:
+        await message.answer("❗ Будь ласка, введіть запитання.")
+        return
+
+    await message.answer("⌛ Працюю над відповіддю...")
+    answer = generate_answer(question)
+    await message.answer(answer)
 
 if __name__ == "__main__":
-    from aiogram import executor
-    executor.start_polling(dp, skip_updates=True)
+    import asyncio
+    asyncio.run(dp.start_polling(bot))
